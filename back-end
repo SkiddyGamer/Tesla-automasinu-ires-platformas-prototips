@@ -1,0 +1,112 @@
+using System;
+using System.Collections.Generic;
+using System.Data.SQLite;
+using System.Globalization;
+
+namespace TeslaRentalPlatform
+{
+    internal class Program
+    {
+        private static void Main(string[] args)
+        {
+            Database.Initialize();
+            Console.WriteLine("Tesla Rental Platform initialized successfully.");
+        }
+    }
+
+    internal static class Database
+    {
+        private const string ConnectionString = "Data Source=tesla_rental.db;Version=3;";
+
+        public static void Initialize()
+        {
+            using var connection = new SQLiteConnection(ConnectionString);
+            connection.Open();
+
+            ExecuteNonQuery(connection, @"CREATE TABLE IF NOT EXISTS TeslaCars (
+                                            ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                                            Model TEXT NOT NULL,
+                                            HourlyRate REAL NOT NULL,
+                                            KilometerRate REAL NOT NULL
+                                        );");
+
+            ExecuteNonQuery(connection, @"CREATE TABLE IF NOT EXISTS Clients (
+                                               ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                                               Name TEXT NOT NULL,
+                                               Email TEXT NOT NULL UNIQUE
+                                           );");
+
+            ExecuteNonQuery(connection, @"CREATE TABLE IF NOT EXISTS Rentals (
+                                               ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                                               ClientID INTEGER NOT NULL,
+                                               CarID INTEGER NOT NULL,
+                                               StartTime DATETIME NOT NULL,
+                                               EndTime DATETIME,
+                                               KilometersDriven REAL DEFAULT 0,
+                                               TotalCost REAL DEFAULT 0,
+                                               FOREIGN KEY (ClientID) REFERENCES Clients(ID),
+                                               FOREIGN KEY (CarID) REFERENCES TeslaCars(ID)
+                                           );");
+        }
+
+        private static void ExecuteNonQuery(SQLiteConnection connection, string query)
+        {
+            using var command = new SQLiteCommand(query, connection);
+            command.ExecuteNonQuery();
+        }
+    }
+
+    public class TeslaCar
+    {
+        public int ID { get; set; }
+        public string Model { get; set; } = string.Empty;
+        public decimal HourlyRate { get; set; }
+        public decimal KilometerRate { get; set; }
+
+        public override string ToString()
+        {
+            return $"[ID: {ID}] {Model} | Hourly Rate: {HourlyRate.ToString("C", CultureInfo.CurrentCulture)}, Kilometer Rate: {KilometerRate.ToString("C", CultureInfo.CurrentCulture)}";
+        }
+    }
+
+    public class Client
+    {
+        public int ID { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+
+        public override string ToString()
+        {
+            return $"[ID: {ID}] {Name} | Email: {Email}";
+        }
+    }
+
+    public class Rental
+    {
+        public int ID { get; set; }
+        public int ClientID { get; set; }
+        public int CarID { get; set; }
+        public DateTime StartTime { get; set; }
+        public DateTime? EndTime { get; set; }
+        public double KilometersDriven { get; set; }
+        public decimal TotalCost { get; private set; }
+
+        public decimal CalculateCost(decimal hourlyRate, decimal kilometerRate)
+        {
+            if (!EndTime.HasValue)
+            {
+                throw new InvalidOperationException("Cannot calculate cost; rental has not ended yet.");
+            }
+
+            var rentalDurationHours = (EndTime.Value - StartTime).TotalHours;
+            TotalCost = (decimal)rentalDurationHours * hourlyRate + (decimal)KilometersDriven * kilometerRate;
+            return TotalCost;
+        }
+
+        public override string ToString()
+        {
+            var status = EndTime.HasValue ? $"Ended: {EndTime.Value}" : "Ongoing";
+            return $"[Rental ID: {ID}] Client: {ClientID}, Car: {CarID}, Start: {StartTime}, {status}, Kilometers: {KilometersDriven}, Total Cost: {TotalCost.ToString("C", CultureInfo.CurrentCulture)}";
+        }
+    }
+}
